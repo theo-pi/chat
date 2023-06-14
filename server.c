@@ -6,87 +6,101 @@
 #include <sys/socket.h>
 #include <pthread.h>
 
-#define MAX_CLIENTS 2
+#define SERVER_ADDRESS "127.0.0.1"
+#define SERVER_PORT 12345
 #define BUFFER_SIZE 1024
+#define MAX_CLIENTS 2
 
-typedef struct {
-    int socket;
-    char username[BUFFER_SIZE];
-} Client;
+int client_sockets[MAX_CLIENTS];
 
-Client clients[MAX_CLIENTS];
-pthread_t client_threads[MAX_CLIENTS];
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+void send_message_to_all_clients(const char *message, int sender_socket) {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        int client_socket = client_sockets[i];
 
-void *handle_client(void *arg) {
-    Client *client = (Client *)arg;
-    int client_socket = client->socket;
-    char buffer[BUFFER_SIZE];
-    ssize_t bytes_read;
-
-    while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
-        buffer[bytes_read] = '\0';
-        printf("%s sent: %s\n", client->username, buffer);
-
-        pthread_mutex_lock(&mutex);
-
-        // Broadcast the received message to all other clients
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            if (clients[i].socket != -1 && clients[i].socket != client_socket) {
-                char message[BUFFER_SIZE];
-                snprintf(message, BUFFER_SIZE, "%s: %s", client->username, buffer);
-                send(clients[i].socket, message, strlen(message), 0);
+        if (client_socket != -1 && client_socket != sender_socket) {
+            if (send(client_socket, message, strlen(message), 0) == -1) {
+                perror("send");
+                exit(EXIT_FAILURE);
             }
         }
-
-        pthread_mutex_unlock(&mutex);
     }
+}
 
-    if (bytes_read == 0) {
-        printf("%s disconnected.\n", client->username);
+void *client_handler(void *arg) {
+    int client_socket = *(int *)arg;
+    char username[BUFFER_SIZE];
+
+    // Receive the username from the client
+    ssize_t bytes_received = recv(client_socket, username, BUFFER_SIZE - 1, 0);
+    if (bytes_received > 0) {
+        username[bytes_received] = '\0';
+        printf("\033[1;34m%s has joined the chat.\033[0m\n", username);
+
+        char welcome_message[BUFFER_SIZE];
+        snprintf(welcome_message, BUFFER_SIZE, "Welcome, %s!\n", username);
+        send(client_socket, welcome_message, strlen(welcome_message), 0);
     } else {
         perror("recv");
+        exit(EXIT_FAILURE);
     }
 
-    pthread_mutex_lock(&mutex);
+    while (1) {
+        char message[BUFFER_SIZE];
+        bytes_received = recv(client_socket, message, BUFFER_SIZE - 1, 0);
+        if (bytes_received > 0) {
+            message[bytes_received] = '\0';
 
-    // Remove client from the array
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (clients[i].socket == client_socket) {
-            clients[i].socket = -1;
+            // Send the message to all clients
+            char formatted_message[BUFFER_SIZE];
+            snprintf(formatted_message, BUFFER_SIZE, "\033[1;34m%s:\033[0m %s", username, message);
+            send_message_to_all_clients(formatted_message, client_socket);
+        } else if (bytes_received == 0) {
+            // Client has disconnected
+            printf("\033[1;34m%s has left the chat.\033[0m\n", username);
+
+            char leave_message[BUFFER_SIZE];
+            snprintf(leave_message, BUFFER_SIZE, "%s has left the chat.\n", username);
+            send_message_to_all_clients(leave_message, client_socket);
+
+            // Close the client socket
+            close(client_socket);
+
+            // Remove the client socket from the array
+            for (int i = 0; i < MAX_CLIENTS; i++) {
+                if (client_sockets[i] == client_socket) {
+                    client_sockets[i] = -1;
+                    break;
+                }
+            }
+
             break;
+        } else {
+            perror("recv");
+            exit(EXIT_FAILURE);
         }
     }
 
-    pthread_mutex_unlock(&mutex);
-
-    close(client_socket);
     pthread_exit(NULL);
 }
 
 int main() {
-    int server_socket, client_socket;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_addr_len = sizeof(client_addr);
+    int server_socket;
+    struct sockaddr_in server_address;
 
-    // Initialize client socket array
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        clients[i].socket = -1;
-    }
-
-    // Create server socket
-    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    // Create the server socket
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == -1) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    // Set server address and port
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(12345);
+    // Set up the server address
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(SERVER_PORT);
 
-    // Bind server socket to the specified address and port
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+    // Bind the server socket to the specified address and port
+    if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
         perror("bind");
         exit(EXIT_FAILURE);
     }
@@ -97,55 +111,51 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port 12345...\n");
+    printf("Server started. Waiting for clients...\n");
+
+    pthread_t client_threads[MAX_CLIENTS];
+
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        client_sockets[i] = -1;
+    }
+
+    int client_count = 0;
 
     while (1) {
-        // Accept a new connection
-        if ((client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_addr_len)) == -1) {
+        // Accept a new client connection
+        int client_socket = accept(server_socket, NULL, NULL);
+        if (client_socket == -1) {
             perror("accept");
             exit(EXIT_FAILURE);
         }
 
-        printf("Client connected: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
-        pthread_mutex_lock(&mutex);
-
-        // Find an empty slot in the client sockets array
-        int i;
-        for (i = 0; i < MAX_CLIENTS; i++) {
-            if (clients[i].socket == -1) {
-                clients[i].socket = client_socket;
+        // Add the client socket to the array
+        for (int i = 0; i < MAX_CLIENTS; i++) {
+            if (client_sockets[i] == -1) {
+                client_sockets[i] = client_socket;
                 break;
             }
         }
 
-        pthread_mutex_unlock(&mutex);
+        // Create a new thread to handle the client
+        if (pthread_create(&client_threads[client_count], NULL, client_handler, &client_socket) != 0) {
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
 
-        if (i == MAX_CLIENTS) {
-            printf("Max clients reached. Connection rejected.\n");
-            close(client_socket);
-        } else {
-            // Prompt the client for their username
-            char username[BUFFER_SIZE];
-            snprintf(username, BUFFER_SIZE, "Enter your username: ");
-            send(client_socket, username, strlen(username), 0);
+        client_count++;
 
-            // Receive the username from the client
-            ssize_t bytes_received = recv(client_socket, username, BUFFER_SIZE - 1, 0);
-            username[bytes_received] = '\0';
-
-            // Save the username in the client struct
-            strncpy(clients[i].username, username, BUFFER_SIZE);
-
-            // Create a new thread to handle the client
-            if (pthread_create(&client_threads[i], NULL, handle_client, &clients[i]) != 0) {
-                perror("pthread_create");
-                exit(EXIT_FAILURE);
-            }
+        if (client_count == MAX_CLIENTS) {
+            break;
         }
     }
 
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        pthread_join(client_threads[i], NULL);
+    }
+
+    // Close the server socket
     close(server_socket);
-    pthread_mutex_destroy(&mutex);
+
     return 0;
 }

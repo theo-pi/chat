@@ -11,124 +11,86 @@
 #define BUFFER_SIZE 1024
 
 int client_socket;
-char buffer[BUFFER_SIZE];
-char username[BUFFER_SIZE];
-/*
-void *send_message(void *arg) {
-    while (1) {
-        //printf("%s: ", username);
-        fgets(buffer, BUFFER_SIZE, stdin);
-
-        // Send the message to the server
-        if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-            perror("send");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    pthread_exit(NULL);
-}
-*/
-
-//test change
-
-
-
-void *send_message(void *arg) {
-    while (1) {
-        //printf("%s: ", username);
-        fgets(buffer, BUFFER_SIZE, stdin);
-
-        // Remove trailing newline character
-        buffer[strcspn(buffer, "\n")] = '\0';
-
-        // Set the text color to white
-        printf("\033[0;37m");
-
-        // Send the message to the server
-        if (send(client_socket, buffer, strlen(buffer), 0) == -1) {
-            perror("send");
-            exit(EXIT_FAILURE);
-        }
-
-        // Reset the text color to default
-        printf("\033[0m");
-    }
-
-    pthread_exit(NULL);
-}
 
 void *receive_message(void *arg) {
-    ssize_t bytes_received;
-
-    while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
-        buffer[bytes_received] = '\0';
-        printf("\033[1;34m%s\033[0m\n", buffer);
-    }
-
-    if (bytes_received == 0) {
-        printf("Server disconnected.\n");
-    } else {
-        perror("recv");
+    while (1) {
+        char buffer[BUFFER_SIZE];
+        ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+        if (bytes_received > 0) {
+            buffer[bytes_received] = '\0';
+            printf("\033[0;34m%s\033[0m\n", buffer);
+        } else if (bytes_received == 0) {
+            // Server has disconnected
+            printf("Server has disconnected.\n");
+            break;
+        } else {
+            perror("recv");
+            exit(EXIT_FAILURE);
+        }
     }
 
     pthread_exit(NULL);
 }
 
 int main() {
-    struct sockaddr_in server_addr;
+    struct sockaddr_in server_address;
 
-    // Create client socket
-    if ((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    // Create the client socket
+    client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket == -1) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    // Set server address and port
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
-    server_addr.sin_port = htons(SERVER_PORT);
+    // Set up the server address
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
+    server_address.sin_port = htons(SERVER_PORT);
 
     // Connect to the server
-    if (connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+    if (connect(client_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
         perror("connect");
         exit(EXIT_FAILURE);
     }
 
-    printf("Connected to the server.\n");
-
-    // Receive the username prompt from the server
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-    buffer[bytes_received] = '\0';
-    printf("%s", buffer);
+    // Get the username from the user
+    char username[BUFFER_SIZE];
+    printf("Enter your username: ");
+    fgets(username, BUFFER_SIZE, stdin);
+    username[strcspn(username, "\n")] = '\0';
 
     // Send the username to the server
-    fgets(username, BUFFER_SIZE, stdin);
-    username[strcspn(username, "\n")] = '\0'; // Remove newline character
-
     if (send(client_socket, username, strlen(username), 0) == -1) {
         perror("send");
         exit(EXIT_FAILURE);
     }
 
-    pthread_t send_thread, receive_thread;
-
-    // Create send thread
-    if (pthread_create(&send_thread, NULL, send_message, NULL) != 0) {
-        perror("pthread_create");
-        exit(EXIT_FAILURE);
-    }
-
-    // Create receive thread
+    // Create a new thread to receive messages from the server
+    pthread_t receive_thread;
     if (pthread_create(&receive_thread, NULL, receive_message, NULL) != 0) {
         perror("pthread_create");
         exit(EXIT_FAILURE);
     }
 
-    // Wait for threads to finish
-    pthread_join(send_thread, NULL);
-    pthread_join(receive_thread, NULL);
+    while (1) {
+        char message[BUFFER_SIZE];
+        fgets(message, BUFFER_SIZE, stdin);
+        message[strcspn(message, "\n")] = '\0';
 
+        if (strcmp(message, "quit") == 0) {
+            printf("Déconnecté...\n");
+            exit(EXIT_SUCCESS);
+        }
+
+        // Send the message to the server
+        if (send(client_socket, message, strlen(message), 0) == -1) {
+            perror("send");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Close the client socket
     close(client_socket);
+
     return 0;
 }
