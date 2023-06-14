@@ -29,6 +29,11 @@ void *send_message(void *arg) {
     pthread_exit(NULL);
 }
 */
+
+//test change
+
+
+
 void *send_message(void *arg) {
     while (1) {
         //printf("%s: ", username);
