@@ -9,6 +9,20 @@ V3 :
 
 V4:correction du bug ( communication continue meme apres deconnexion d'un client.)
 
-V5: ajout des signaux
+V5: ajout des signaux  ( comprend les signaux SIGINT et SIGTERM) 
+cependant il faut faire une conversation seulement soit avec des clients soit avec des connexions exterieurs sinon on a un erreur sur l'envoie et la reception des messages.   
+La V5 ne comprend pas:
+- signal SIGHUP
+- daemon
+- log
+
+V6:ajout de daemon( mise en arriere plan)
+ne comprend pas:
+- signal SIGHUP
+- log
+
+V7:Correction de bug sur le signal SIGHUP et ajout de celui-ci
+(en cours de version)
+
 
 
