@@ -23,6 +23,8 @@ ne comprend pas:
 
 V7:Correction de bug sur le signal SIGHUP et ajout de celui-ci
 (en cours de version)
+V7 fonctionnelle cependant parfois le process est encore vu comme présent alors qu'il n'y est pas.
 
+V8: log
 
 
