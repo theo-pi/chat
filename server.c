@@ -108,7 +108,7 @@ void *client_handler(void *arg) {
 
 void handle_signal(int signal) {
     if (signal == SIGTERM || signal == SIGINT) {
-        printf("Server terminated.\n");
+        printf("Server fermé.\n");
 
         // Close the server socket
         close(server_socket);
@@ -129,7 +129,7 @@ void handle_signal(int signal) {
 
         exit(EXIT_SUCCESS);
     } else if (signal == SIGHUP) {
-        printf("Server restarting...\n");
+        printf("Redémarrage du serveur...\n");
 
         // Close the server socket
         close(server_socket);
@@ -148,20 +148,23 @@ void handle_signal(int signal) {
 
         pthread_mutex_destroy(&client_sockets_mutex);
 
-         sleep(120);  // Attends 20 secondes
+        execl("./serverer", NULL);
 
-        // Restart the server by executing the current program again
-        char *args[] = {NULL};
-        execvp("./server", args);
-        exit(EXIT_SUCCESS);
+        perror("Erreur lors du redémarrage du serveur");
+        exit(EXIT_FAILURE);
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+
+    if (argc >= 2 && strcmp(argv[1], "-daemon") == 0) {
+        daemon(0, 0); // Création du daemon
+    }
+
     // Register signal handlers
+    signal(SIGHUP, handle_signal);
     signal(SIGTERM, handle_signal);
     signal(SIGINT, handle_signal);
-    signal(SIGHUP, handle_signal);
 
     // Create the server socket
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -231,5 +234,4 @@ int main() {
     pthread_mutex_destroy(&client_sockets_mutex);
 
     return 0;
-}
 }
