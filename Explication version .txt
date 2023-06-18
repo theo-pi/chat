@@ -29,5 +29,7 @@ V7:Correction de bug sur le signal SIGHUP et ajout de celui-ci
 V8: redemarrage avec daemon  ok
 création des log et normalisation de ces derniers en cours 
 
+V9: serveur comprenant : signaux/daemon/no mutex
+-log non fournie dans celui-ci
 
 
