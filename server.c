@@ -14,11 +14,8 @@
 
 int server_socket;
 int client_sockets[MAX_CLIENTS];
-pthread_mutex_t client_sockets_mutex;
 
 void send_message_to_all_clients(const char *message, int sender_socket) {
-    pthread_mutex_lock(&client_sockets_mutex);
-
     for (int i = 0; i < MAX_CLIENTS; i++) {
         int client_socket = client_sockets[i];
 
@@ -29,8 +26,6 @@ void send_message_to_all_clients(const char *message, int sender_socket) {
             }
         }
     }
-
-    pthread_mutex_unlock(&client_sockets_mutex);
 }
 
 void *client_handler(void *arg) {
@@ -84,8 +79,6 @@ void *client_handler(void *arg) {
             // Close the client socket
             close(client_socket);
 
-            pthread_mutex_lock(&client_sockets_mutex);
-
             // Remove the client socket from the array
             for (int i = 0; i < MAX_CLIENTS; i++) {
                 if (client_sockets[i] == client_socket) {
@@ -93,8 +86,6 @@ void *client_handler(void *arg) {
                     break;
                 }
             }
-
-            pthread_mutex_unlock(&client_sockets_mutex);
 
             break;
         } else {
@@ -114,18 +105,12 @@ void handle_signal(int signal) {
         close(server_socket);
 
         // Close all client sockets
-        pthread_mutex_lock(&client_sockets_mutex);
-
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
             if (client_socket != -1) {
                 close(client_socket);
             }
         }
-
-        pthread_mutex_unlock(&client_sockets_mutex);
-
-        pthread_mutex_destroy(&client_sockets_mutex);
 
         exit(EXIT_SUCCESS);
     } else if (signal == SIGHUP) {
@@ -135,8 +120,6 @@ void handle_signal(int signal) {
         close(server_socket);
 
         // Close all client sockets
-        pthread_mutex_lock(&client_sockets_mutex);
-
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
             if (client_socket != -1) {
@@ -144,13 +127,28 @@ void handle_signal(int signal) {
             }
         }
 
-        pthread_mutex_unlock(&client_sockets_mutex);
-
-        pthread_mutex_destroy(&client_sockets_mutex);
-
-        execl("./serverer", NULL);
+        execl("./server", NULL);
+        //execl("./server", "server");
 
         perror("Erreur lors du redémarrage du serveur");
+        exit(EXIT_FAILURE);
+    } else if (signal == SIGUSR1) {
+        printf("Redémarrage du serveur en mode daemon...\n");
+
+        // Close the server socket
+        close(server_socket);
+
+        // Close all client sockets
+        for (int i = 0; i < MAX_CLIENTS; i++) {
+            int client_socket = client_sockets[i];
+            if (client_socket != -1) {
+                close(client_socket);
+            }
+        }
+
+        execl("./server", "server", "-daemon");
+
+        perror("Erreur lors du redémarrage du serveur en mode daemon");
         exit(EXIT_FAILURE);
     }
 }
@@ -162,6 +160,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Register signal handlers
+    signal(SIGUSR1, handle_signal);
     signal(SIGHUP, handle_signal);
     signal(SIGTERM, handle_signal);
     signal(SIGINT, handle_signal);
@@ -198,8 +197,6 @@ int main(int argc, char *argv[]) {
         client_sockets[i] = -1;
     }
 
-    pthread_mutex_init(&client_sockets_mutex, NULL);
-
     while (1) {
         struct sockaddr_in client_address;
         socklen_t client_address_length = sizeof(client_address);
@@ -211,8 +208,6 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
 
-        pthread_mutex_lock(&client_sockets_mutex);
-
         // Add the client socket to the array
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] == -1) {
@@ -221,8 +216,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        pthread_mutex_unlock(&client_sockets_mutex);
-
         // Create a new thread to handle the client
         pthread_t client_thread;
         if (pthread_create(&client_thread, NULL, client_handler, &client_socket) != 0) {
@@ -230,8 +223,6 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-
-    pthread_mutex_destroy(&client_sockets_mutex);
 
     return 0;
 }
