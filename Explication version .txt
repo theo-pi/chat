@@ -8,6 +8,8 @@ V2 no :
 V3 :
 
 V4:correction du bug ( communication continue meme apres deconnexion d'un client.)
+pas de version V4 ;)
+
 
 V5: ajout des signaux  ( comprend les signaux SIGINT et SIGTERM) 
 cependant il faut faire une conversation seulement soit avec des clients soit avec des connexions exterieurs sinon on a un erreur sur l'envoie et la reception des messages.   
