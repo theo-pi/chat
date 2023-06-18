@@ -26,5 +26,8 @@ ne comprend pas:
 V7:Correction de bug sur le signal SIGHUP et ajout de celui-ci
 (en cours de version)
 
+V8: redemarrage avec daemon  ok
+création des log et normalisation de ces derniers en cours 
+
 
 
