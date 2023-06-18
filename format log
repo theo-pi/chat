@@ -1,0 +1,122 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <pthread.h>
+#include <signal.h>
+#include <time.h>  // Ajout de la bibliothèque time.h pour la manipulation du temps
+
+#define SERVER_ADDRESS "127.0.0.1"
+#define SERVER_PORT 12345
+#define BUFFER_SIZE 1024
+#define MAX_CLIENTS 3
+
+int server_socket;
+int client_sockets[MAX_CLIENTS];
+pthread_mutex_t client_sockets_mutex;
+FILE* log_file;  // Ajout d'une variable pour représenter le fichier de logs
+
+void send_message_to_all_clients(const char *message, int sender_socket) {
+    pthread_mutex_lock(&client_sockets_mutex);
+
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        int client_socket = client_sockets[i];
+
+        if (client_socket != -1 && client_socket != sender_socket) {
+            if (send(client_socket, message, strlen(message), 0) == -1) {
+                perror("send");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&client_sockets_mutex);
+}
+
+void *client_handler(void *arg) {
+    // ...
+
+    return NULL;
+}
+
+void handle_signal(int signal) {
+    if (signal == SIGTERM || signal == SIGINT) {
+        printf("Server fermé.\n");
+
+        // ...
+
+        time_t current_time;
+        time(&current_time);
+        struct tm *timeinfo = localtime(&current_time);
+        char formatted_time[30];
+        strftime(formatted_time, sizeof(formatted_time), "%b %d %H:%M:%S", timeinfo);
+
+        fprintf(log_file, "%s machine_de_test dhcp service[warning] 110 corps du message\n", formatted_time);
+
+        // ...
+
+    } else if (signal == SIGHUP) {
+        printf("Redémarrage du serveur...\n");
+
+        // ...
+
+        time_t current_time;
+        time(&current_time);
+        struct tm *timeinfo = localtime(&current_time);
+        char formatted_time[30];
+        strftime(formatted_time, sizeof(formatted_time), "%b %d %H:%M:%S", timeinfo);
+
+        fprintf(log_file, "%s machine_de_test dhcp service[warning] 110 corps du message\n", formatted_time);
+
+        // ...
+    }
+}
+
+int main(int argc, char *argv[]) {
+    if (argc >= 2 && strcmp(argv[1], "-daemon") == 0) {
+        daemon(0, 0); // Création du daemon
+    }
+
+    // ...
+
+    log_file = fopen("server_logs.txt", "a");  // Ouverture du fichier de logs en mode append
+
+    if (log_file == NULL) {
+        perror("Erreur lors de l'ouverture du fichier de logs");
+        exit(EXIT_FAILURE);
+    }
+
+    // ...
+
+    while (1) {
+        // ...
+
+        int client_socket = accept(server_socket, (struct sockaddr *)&client_address, &client_address_length);
+
+        // ...
+
+        pthread_mutex_lock(&client_sockets_mutex);
+
+        // ...
+
+        pthread_mutex_unlock(&client_sockets_mutex);
+
+        // ...
+
+        pthread_t client_thread;
+        if (pthread_create(&client_thread, NULL, client_handler, &client_socket) != 0) {
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // ...
+
+    pthread_mutex_destroy(&client_sockets_mutex);
+
+    fclose(log_file); // Fermeture du fichier de logs
+
+    return 0;
+}
