@@ -41,9 +41,9 @@ void *client_handler(void *arg) {
     }
 
     // Reçoit le nom d'utilisateur du client
-    ssize_t bytes_received = recv(client_socket, username, BUFFER_SIZE - 1, 0);
-    if (bytes_received > 0) {
-        for (int i = 0; i < bytes_received; ++i) {
+    ssize_t message_client = recv(client_socket, username, BUFFER_SIZE - 1, 0);
+    if (message_client > 0) {
+        for (int i = 0; i < message_client; ++i) {
             if (username[i] == '\n' || username[i] == '\r') {
                 username[i] = '\0';
                 break;
@@ -61,21 +61,21 @@ void *client_handler(void *arg) {
 
     while (1) {
         char message[BUFFER_SIZE];
-        bytes_received = recv(client_socket, message, BUFFER_SIZE - 1, 0);
-        if (bytes_received > 0) {
-            message[bytes_received] = '\0';
+        message_client = recv(client_socket, message, BUFFER_SIZE - 1, 0);
+        if (message_client > 0) {
+            message[message_client] = '\0';
 
             // Envoie le message à tous les clients
-            char formatted_message[BUFFER_SIZE];
-            snprintf(formatted_message, BUFFER_SIZE, "\033[1;34m%s:\033[0m %s", username, message);
-            send_message_to_all_clients(formatted_message, client_socket);
-        } else if (bytes_received == 0) {
+            char name_message_client[BUFFER_SIZE];
+            snprintf(name_message_client, BUFFER_SIZE, "\033[1;34m%s:\033[0m %s", username, message);
+            send_message_to_all_clients(name_message_client, client_socket);
+        } else if (message_client == 0) {
             // Le client s'est déconnecté
             printf("\033[1;34m%s a quitté(e) le chat\033[0m\n", username);
 
-            char leave_message[BUFFER_SIZE];
-            snprintf(leave_message, BUFFER_SIZE, "%s a quitté(e) le chat\n", username);
-            send_message_to_all_clients(leave_message, client_socket);
+            char leave_client_message[BUFFER_SIZE];
+            snprintf(leave_client_message, BUFFER_SIZE, "%s a quitté(e) le chat\n", username);
+            send_message_to_all_clients(leave_client_message, client_socket);
 
             // Ferme le socket du client
             close(client_socket);
@@ -128,12 +128,10 @@ void handle_signal(int signal) {
                 close(client_socket);
             }
         }
-
         execl("./server", NULL);
-        //execl("./server", "server");
-
         perror("Erreur lors du redémarrage du serveur");
         exit(EXIT_FAILURE);
+        
     } else if (signal == SIGUSR1) {
         printf("Redémarrage du serveur en mode daemon...\n");
 
@@ -149,7 +147,6 @@ void handle_signal(int signal) {
         }
 
         execl("./server", "server", "-daemon");
-
         perror("Erreur lors du redémarrage du serveur en mode daemon");
         exit(EXIT_FAILURE);
     }
