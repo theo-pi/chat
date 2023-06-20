@@ -80,7 +80,7 @@ void *client_handler(void *arg) {
             // Ferme le socket du client
             close(client_socket);
 
-            // Supprime le socket du client du tableau
+            // Supprime le socket du client du tableau | MAJ du tableau des sockets client
             for (int i = 0; i < MAX_CLIENTS; i++) {
                 if (client_sockets[i] == client_socket) {
                     client_sockets[i] = -1;
