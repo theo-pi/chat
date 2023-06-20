@@ -186,10 +186,28 @@ void Gestion_signaux(int signal) {
 
 int main(int argc, char *argv[]) {
 
+    // Lancement du programme en arrière plan
     if (argc >= 2 && strcmp(argv[1], "-daemon") == 0) {
-        daemon(0, 0);
-    }
+        pid_t pid = fork();
 
+        if (pid < 0) {
+            perror("Erreur lors de la création du processus fils");
+            exit(EXIT_FAILURE);
+        }
+
+        if (pid > 0) {
+            // Terminer le processus parent
+            exit(EXIT_SUCCESS);
+        }
+
+        // Créer une nouvelle session et devenir le leader de la session
+        if (setsid() < 0) {
+            perror("Erreur lors de la création de la nouvelle session");
+            exit(EXIT_FAILURE);
+        }
+    }
+    
+    // Ouvrerture du fichier des logs
     log_file = fopen("logs.txt", "a+");
     if (log_file == NULL) {
         perror("Erreur lors de l'ouverture du fichier de journalisation");
@@ -202,11 +220,14 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, Gestion_signaux);
     signal(SIGINT, Gestion_signaux);
 
-    // Create the server socket
+    // Création de la soket serveur
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1) {
-        perror("socket");
+        perror("Erreur lors de la création de la socket du serveur");
         exit(EXIT_FAILURE);
+    }
+    else{
+        log_message("info", "Server ouvert");
     }
 
     // Set up the server address
@@ -223,13 +244,13 @@ int main(int argc, char *argv[]) {
 
     // Listen for incoming connections
     if (listen(server_socket, MAX_CLIENTS) == -1) {
-        perror("listen");
+        perror("en écoute");
         exit(EXIT_FAILURE);
     }
 
     printf("Le serveur est prêt à recevoir des connexions...\n");
 
-    // Initialize the client sockets array
+    // Initialisation des sockets des clients
     for (int i = 0; i < MAX_CLIENTS; i++) {
         client_sockets[i] = -1;
     }
@@ -238,14 +259,14 @@ int main(int argc, char *argv[]) {
         struct sockaddr_in client_address;
         socklen_t client_address_length = sizeof(client_address);
 
-        // Accept a new client connection
+        // Acceptation de nouveaux client
         int client_socket = accept(server_socket, (struct sockaddr *)&client_address, &client_address_length);
         if (client_socket == -1) {
             perror("accept");
             exit(EXIT_FAILURE);
         }
 
-        // Add the client socket to the array
+        // Ajout de la soket d'un nouveau client
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] == -1) {
                 client_sockets[i] = client_socket;
