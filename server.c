@@ -19,7 +19,7 @@ int client_sockets[MAX_CLIENTS];
 
 FILE *log_file;
 
-void log_message(const char *level, const char *message) {
+void log_message(const char *level, const char *message, ...) {
     time_t current_time = time(NULL);
     struct tm *local_time = localtime(&current_time);
     char time_string[20];
@@ -28,7 +28,19 @@ void log_message(const char *level, const char *message) {
     char hostname[256];
     gethostname(hostname, sizeof(hostname));
 
-    fprintf(log_file, "%s %s dhcp service[%s] %s\n", time_string, hostname, level, message);
+    va_list args;
+    va_start(args, message);
+
+    fprintf(log_file, "%s %s dhcp service[%s]", time_string, hostname, level);
+
+    const char *username = va_arg(args, const char *);
+    if (username != NULL) {
+        fprintf(log_file, " %s", username);
+    }
+
+    fprintf(log_file, " %s\n", message);
+
+    va_end(args);
     fflush(log_file);  // Pour s'assurer que le message est écrit immédiatement dans le fichier
 }
 
@@ -72,6 +84,7 @@ void *client_handler(void *arg) {
             }
         }
         printf("\033[1;34m%s a rejoint le chat\033[0m\n", username);
+        log_message("info", "Client connecté", username);
 
         char welcome_message[BUFFER_SIZE];
         snprintf(welcome_message, BUFFER_SIZE, "Bienvenue, %s\n", username);
@@ -94,6 +107,7 @@ void *client_handler(void *arg) {
         } else if (bytes_received == 0) {
             // Client has disconnected
             printf("\033[1;34m%s a quitté(e) le chat\033[0m\n", username);
+            log_message("info", "Client déconnecté", username);
 
             char leave_message[BUFFER_SIZE];
             snprintf(leave_message, BUFFER_SIZE, "%s a quitté(e) le chat\n", username);
@@ -186,23 +200,10 @@ void Gestion_signaux(int signal) {
 
 int main(int argc, char *argv[]) {
 
-    // Lancement du programme en arrière plan
     if (argc >= 2 && strcmp(argv[1], "-daemon") == 0) {
-        pid_t pid = fork();
-
-        if (pid < 0) {
-            perror("Erreur lors de la création du processus fils");
-            exit(EXIT_FAILURE);
-        }
-
-        if (pid > 0) {
-            // Terminer le processus parent
-            exit(EXIT_SUCCESS);
-        }
-
-        // Créer une nouvelle session et devenir le leader de la session
-        if (setsid() < 0) {
-            perror("Erreur lors de la création de la nouvelle session");
+        int result = daemon(0, 0);
+        if (result == -1) {
+            perror("Erreur lors du lancement du programme en mode daemon");
             exit(EXIT_FAILURE);
         }
     }
@@ -211,6 +212,7 @@ int main(int argc, char *argv[]) {
     log_file = fopen("logs.txt", "a+");
     if (log_file == NULL) {
         perror("Erreur lors de l'ouverture du fichier de journalisation");
+        log_message("Erreur", "Echec de l'ouverture du fichier de journalisation");
         exit(EXIT_FAILURE);
     }
 
@@ -244,7 +246,7 @@ int main(int argc, char *argv[]) {
 
     // Listen for incoming connections
     if (listen(server_socket, MAX_CLIENTS) == -1) {
-        perror("en écoute");
+        perror("lisent");
         exit(EXIT_FAILURE);
     }
 
