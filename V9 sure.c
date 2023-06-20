@@ -35,8 +35,7 @@ void *client_handler(void *arg) {
     char username[BUFFER_SIZE];
 
     // Envoie le message "Entrer votre pseudo :" au client
-    char prompt_message[] = "Entrer votre pseudo : ";
-    if (send(client_socket, prompt_message, strlen(prompt_message), 0) == -1) {
+    if (send(client_socket, "Entrer votre pseudo : ", strlen("Entrer votre pseudo : "), 0) == -1) {
         perror("send");
         exit(EXIT_FAILURE);
     }
