@@ -115,7 +115,9 @@ void handle_signal(int signal) {
         }
 
         exit(EXIT_SUCCESS);
-    } else if (signal == SIGHUP) {
+    } 
+    
+    else if (signal == SIGHUP) {
         printf("Redémarrage du serveur...\n");
 
         // Ferme le socket du serveur
