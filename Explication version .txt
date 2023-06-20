@@ -32,4 +32,4 @@ création des log et normalisation de ces derniers en cours
 V9: serveur comprenant : signaux/daemon/no mutex
 -log non fournie dans celui-ci
 
-
+ATTENTION : CLIENT - CLIENT SERVEUR UNIQUEMENT OU TELNET - TELNET SERVEUR
