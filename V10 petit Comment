@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stdarg.h>
 
 #define SERVER_ADDRESS "127.0.0.1"
 #define SERVER_PORT 12345
@@ -15,33 +17,49 @@
 int server_socket;
 int client_sockets[MAX_CLIENTS];
 
-// Fonction pour envoyer un message à tous les clients, sauf l'expéditeur
+FILE *log_file;
+
+// Écrit un message dans le fichier de logs avec un niveau donné
+void log_message(const char *level, const char *message) {
+    time_t current_time = time(NULL);
+    struct tm *local_time = localtime(&current_time);
+    char time_string[20];
+    strftime(time_string, sizeof(time_string), "%b %d %H:%M:%S", local_time);
+
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+
+    fprintf(log_file, "%s %s dhcp service[%s] %s\n", time_string, hostname, level, message);
+    fflush(log_file);  // Pour s'assurer que le message est écrit immédiatement dans le fichier
+}
+
+// Envoie un message à tous les clients, sauf à celui spécifié
 void send_message_to_all_clients(const char *message, int sender_socket) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         int client_socket = client_sockets[i];
 
         if (client_socket != -1 && client_socket != sender_socket) {
             if (send(client_socket, message, strlen(message), 0) == -1) {
-                perror("send");
+                perror("Erreur lors de l'envoi du message");
                 exit(EXIT_FAILURE);
             }
         }
     }
 }
 
-// Fonction exécutée par chaque thread client
+// Gère les clients
 void *client_handler(void *arg) {
     int client_socket = *(int *)arg;
     char username[BUFFER_SIZE];
 
-    // Envoie le message "Entrer votre pseudo :" au client
+    // Prompt pour demander le pseudo du client
     char prompt_message[] = "Entrer votre pseudo : ";
     if (send(client_socket, prompt_message, strlen(prompt_message), 0) == -1) {
         perror("send");
         exit(EXIT_FAILURE);
     }
 
-    // Reçoit le nom d'utilisateur du client
+    // Réception du pseudo du client
     ssize_t bytes_received = recv(client_socket, username, BUFFER_SIZE - 1, 0);
     if (bytes_received > 0) {
         for (int i = 0; i < bytes_received; ++i) {
@@ -66,7 +84,7 @@ void *client_handler(void *arg) {
         if (bytes_received > 0) {
             message[bytes_received] = '\0';
 
-            // Envoie le message à tous les clients
+            // Envoyer le message à tous les clients
             char formatted_message[BUFFER_SIZE];
             snprintf(formatted_message, BUFFER_SIZE, "\033[1;34m%s:\033[0m %s", username, message);
             send_message_to_all_clients(formatted_message, client_socket);
@@ -78,10 +96,10 @@ void *client_handler(void *arg) {
             snprintf(leave_message, BUFFER_SIZE, "%s a quitté(e) le chat\n", username);
             send_message_to_all_clients(leave_message, client_socket);
 
-            // Ferme le socket du client
+            // Fermer le socket client
             close(client_socket);
 
-            // Supprime le socket du client du tableau
+            // Retirer le socket client du tableau
             for (int i = 0; i < MAX_CLIENTS; i++) {
                 if (client_sockets[i] == client_socket) {
                     client_sockets[i] = -1;
@@ -99,95 +117,105 @@ void *client_handler(void *arg) {
     pthread_exit(NULL);
 }
 
-// Gère les signaux reçus par le serveur
-void handle_signal(int signal) {
-    if (signal == SIGTERM || signal == SIGINT) {
+// Gère la fermeture et le redémarrage du serveur
+void Gestion_server(bool reboot, bool reboot_daemon) {
+    // Fermer le socket du serveur
+    if (close(server_socket) == -1) {
+        perror("Erreur lors de la fermeture du serveur");
+    }
+
+    if (!reboot && !reboot_daemon) {
         printf("Server fermé.\n");
+        log_message("info", "Server fermé");
+    }
 
-        // Ferme le socket du serveur
-        close(server_socket);
-
-        // Ferme tous les sockets clients
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            int client_socket = client_sockets[i];
-            if (client_socket != -1) {
-                close(client_socket);
+    // Fermer tous les sockets des clients
+    int client_close_success = 1;  // Variable pour vérifier si la fermeture des clients a réussi
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        int client_socket = client_sockets[i];
+        if (client_socket != -1) {
+            if (close(client_socket) == -1) {
+                perror("Erreur lors de la fermeture du socket d'un client");
+                client_close_success = 0;  // La fermeture d'au moins un client a échoué
             }
         }
+    }
 
-        exit(EXIT_SUCCESS);
+    if (!client_close_success) {
+        printf("La fermeture d'au moins un client socket a échoué.\n");
+    }
+
+    // Redémarrer le serveur
+    if (reboot == true && reboot_daemon == false) {
+        printf("Serveur redémarré\n");
+        if (execl("./server", NULL) == -1) {
+            perror("Erreur lors du redémarrage du serveur");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Redémarrer le serveur en mode daemon
+    if (reboot_daemon == true && reboot == false) {
+        printf("Serveur redémarré en mode daemon\n");
+        if (execl("./server", "server", "-daemon") == -1) {
+            perror("Erreur lors du redémarrage du serveur en mode daemon");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    fclose(log_file);  // Fermeture du fichier de logs
+    exit(EXIT_SUCCESS);
+}
+
+// Gère les appels des signaux
+void Gestion_signaux(int signal) {
+    if (signal == SIGTERM || signal == SIGINT) {
+        Gestion_server(false, false);
     } else if (signal == SIGHUP) {
-        printf("Redémarrage du serveur...\n");
-
-        // Ferme le socket du serveur
-        close(server_socket);
-
-        // Ferme tous les sockets clients
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            int client_socket = client_sockets[i];
-            if (client_socket != -1) {
-                close(client_socket);
-            }
-        }
-
-        execl("./server", NULL);
-        //execl("./server", "server");
-
-        perror("Erreur lors du redémarrage du serveur");
-        exit(EXIT_FAILURE);
+        Gestion_server(true, false);
     } else if (signal == SIGUSR1) {
-        printf("Redémarrage du serveur en mode daemon...\n");
-
-        // Ferme le socket du serveur
-        close(server_socket);
-
-        // Ferme tous les sockets clients
-        for (int i = 0; i < MAX_CLIENTS; i++) {
-            int client_socket = client_sockets[i];
-            if (client_socket != -1) {
-                close(client_socket);
-            }
-        }
-
-        execl("./server", "server", "-daemon");
-
-        perror("Erreur lors du redémarrage du serveur en mode daemon");
-        exit(EXIT_FAILURE);
+        Gestion_server(false, true);
     }
 }
 
 int main(int argc, char *argv[]) {
 
     if (argc >= 2 && strcmp(argv[1], "-daemon") == 0) {
-        daemon(0, 0); // Création du daemon
+        daemon(0, 0);
     }
 
-    // Enregistre les gestionnaires de signaux
-    signal(SIGUSR1, handle_signal);
-    signal(SIGHUP, handle_signal);
-    signal(SIGTERM, handle_signal);
-    signal(SIGINT, handle_signal);
+    log_file = fopen("logs.txt", "a+");
+    if (log_file == NULL) {
+        perror("Erreur lors de l'ouverture du fichier de journalisation");
+        exit(EXIT_FAILURE);
+    }
 
-    // Crée le socket du serveur
+    // Signaux
+    signal(SIGUSR1, Gestion_signaux);
+    signal(SIGHUP, Gestion_signaux);
+    signal(SIGTERM, Gestion_signaux);
+    signal(SIGINT, Gestion_signaux);
+
+    // Créer le socket du serveur
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == -1) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    // Configure l'adresse du serveur
+    // Configurer l'adresse du serveur
     struct sockaddr_in server_address;
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = inet_addr(SERVER_ADDRESS);
     server_address.sin_port = htons(SERVER_PORT);
 
-    // Lie le socket du serveur à l'adresse spécifiée
+    // Lier le socket du serveur à l'adresse spécifiée
     if (bind(server_socket, (struct sockaddr *)&server_address, sizeof(server_address)) == -1) {
         perror("bind");
         exit(EXIT_FAILURE);
     }
 
-    // Écoute les connexions entrantes
+    // Écouter les connexions entrantes
     if (listen(server_socket, MAX_CLIENTS) == -1) {
         perror("listen");
         exit(EXIT_FAILURE);
@@ -195,7 +223,7 @@ int main(int argc, char *argv[]) {
 
     printf("Le serveur est prêt à recevoir des connexions...\n");
 
-    // Initialise le tableau de sockets clients
+    // Initialiser le tableau de sockets clients
     for (int i = 0; i < MAX_CLIENTS; i++) {
         client_sockets[i] = -1;
     }
@@ -204,14 +232,14 @@ int main(int argc, char *argv[]) {
         struct sockaddr_in client_address;
         socklen_t client_address_length = sizeof(client_address);
 
-        // Accepte une nouvelle connexion client
+        // Accepter une nouvelle connexion client
         int client_socket = accept(server_socket, (struct sockaddr *)&client_address, &client_address_length);
         if (client_socket == -1) {
             perror("accept");
             exit(EXIT_FAILURE);
         }
 
-        // Ajoute le socket client au tableau
+        // Ajouter le socket client au tableau
         for (int i = 0; i < MAX_CLIENTS; i++) {
             if (client_sockets[i] == -1) {
                 client_sockets[i] = client_socket;
@@ -219,13 +247,13 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // Crée un nouveau thread pour gérer le client
+        // Créer un nouveau thread pour gérer le client
         pthread_t client_thread;
         if (pthread_create(&client_thread, NULL, client_handler, &client_socket) != 0) {
             perror("pthread_create");
             exit(EXIT_FAILURE);
         }
     }
-
+    fclose(log_file);  // Fermeture du fichier de logs
     return 0;
 }
