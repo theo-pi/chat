@@ -103,9 +103,6 @@ void handle_signal(int signal) {
     if (signal == SIGTERM || signal == SIGINT) {
         printf("Server fermé.\n");
 
-        // Ferme le socket du serveur
-        close(server_socket);
-
         // Ferme tous les sockets clients
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
@@ -113,6 +110,9 @@ void handle_signal(int signal) {
                 close(client_socket);
             }
         }
+
+        // Ferme le socket du serveur
+        close(server_socket);
 
         exit(EXIT_SUCCESS);
     } 
@@ -120,9 +120,6 @@ void handle_signal(int signal) {
     else if (signal == SIGHUP) {
         printf("Redémarrage du serveur...\n");
 
-        // Ferme le socket du serveur
-        close(server_socket);
-
         // Ferme tous les sockets clients
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
@@ -130,6 +127,10 @@ void handle_signal(int signal) {
                 close(client_socket);
             }
         }
+        
+        // Ferme le socket du serveur
+        close(server_socket);
+
         execl("./server", NULL);
         perror("Erreur lors du redémarrage du serveur");
         exit(EXIT_FAILURE);
@@ -137,9 +138,6 @@ void handle_signal(int signal) {
     } else if (signal == SIGUSR1) {
         printf("Redémarrage du serveur en mode daemon...\n");
 
-        // Ferme le socket du serveur
-        close(server_socket);
-
         // Ferme tous les sockets clients
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
@@ -147,6 +145,9 @@ void handle_signal(int signal) {
                 close(client_socket);
             }
         }
+        
+        // Ferme le socket du serveur
+        close(server_socket);
 
         execl("./server", "server", "-daemon");
         perror("Erreur lors du redémarrage du serveur en mode daemon");
@@ -224,6 +225,6 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-
+s
     return 0;
 }
