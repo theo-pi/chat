@@ -118,9 +118,6 @@ void handle_signal(int signal) {
     } else if (signal == SIGHUP) {
         printf("Redémarrage du serveur...\n");
 
-        // Ferme le socket du serveur
-        close(server_socket);
-
         // Ferme tous les sockets clients
         for (int i = 0; i < MAX_CLIENTS; i++) {
             int client_socket = client_sockets[i];
@@ -129,11 +126,14 @@ void handle_signal(int signal) {
             }
         }
 
-        execl("./server", NULL);
-        //execl("./server", "server");
+        // Ferme le socket du serveur
+        close(server_socket);
 
-        perror("Erreur lors du redémarrage du serveur");
-        exit(EXIT_FAILURE);
+        sleep(5);
+
+        execl("test", NULL);
+        
+        exit(EXIT_SUCCESS);
     } else if (signal == SIGUSR1) {
         printf("Redémarrage du serveur en mode daemon...\n");
 
